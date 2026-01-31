@@ -1,0 +1,46 @@
+# =====================================================
+# CERBERO – RISK POLICY v1
+# Hedge-fund grade risk governance
+# =====================================================
+
+version: 1
+active: true
+
+# -----------------------------------------------------
+# GLOBAL HARD LIMITS
+# -----------------------------------------------------
+
+sl_pct_min: 0.25        # minimo SL accettabile (%)
+sl_pct_max: 0.60        # massimo SL accettabile (%)
+
+max_trade_duration_hours: 4   # timeout trade (edge decay)
+
+cooldown_minutes: 5           # cooldown per simbolo
+
+# -----------------------------------------------------
+# R-MULTIPLE POLICY (Take Profit)
+# -----------------------------------------------------
+
+r_multiple_by_class:
+  A_PLUS:
+    tp_r: 1.6
+  A:
+    tp_r: 1.4
+  B:
+    tp_r: 1.2
+
+# -----------------------------------------------------
+# STRUCTURE COMPATIBILITY
+# -----------------------------------------------------
+
+structure_rules:
+  reject_if_sl_pct_gt_max: true
+  reject_if_sl_pct_lt_min: true
+
+# -----------------------------------------------------
+# FUTURE – ADAPTIVE POLICY (PHASE 3)
+# -----------------------------------------------------
+
+adaptive_policy:
+  enabled: false
+  min_trades_required: 500

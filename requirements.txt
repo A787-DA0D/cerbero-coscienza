@@ -1,0 +1,27 @@
+# === CORE ===
+numpy==1.26.4
+pandas==2.2.2
+scikit-learn==1.4.2
+joblib==1.4.2
+scipy==1.12.0
+
+# === TIME & DATE ===
+python-dateutil==2.9.0
+pytz==2024.1
+
+# === CLOUD / STORAGE ===
+google-cloud-storage==2.17.0
+google-cloud-core==2.4.1
+
+# === API / NETWORK ===
+requests==2.32.0
+urllib3==2.2.2
+
+# === DEV/UTILITY ===
+tqdm==4.66.5
+
+# === PARQUET ===
+pyarrow==17.0.0
+
+# === PLOT / DEBUG ===
+matplotlib==3.8.4

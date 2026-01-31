@@ -1,3 +1,55 @@
+# --- Python ---
 __pycache__/
-*.pkl
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Virtual env ---
+.venv/
+venv/
+
+# --- Secrets / local env ---
 .env
+.env.*
+secrets/
+*.pem
+*.key
+
+# --- Local artifacts / data (NON su GitHub) ---
+models/
+features/
+local_features/
+local_raw/
+archive/
+logs/
+*.parquet
+*.csv
+*.jsonl
+*.pt
+*.pth
+*.npz
+*.npy
+*.ckpt
+
+# --- Backups / temp ---
+*.bak
+*.bak*
+*.tmp
+*.save
+*.save.*
+*.swp
+
+# --- OS ---
+.DS_Store
+
+# --- Local config (se serve committarlo lo togliamo dopo) ---
+coord.yaml
