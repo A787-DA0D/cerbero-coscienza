@@ -32,7 +32,7 @@ SYMBOL_MAP: Dict[str, str] = {
     "GBPJPY": "GBP/JPY",
     "XAUUSD": "XAU/USD",
     "XAGUSD": "XAG/USD",
-    "LIGHTCMDUSD": "CL",     # Crude Oil (se non va, poi lo sistemiamo)
+    "LIGHTCMDUSD": "WTI/USD",     # Crude Oil (se non va, poi lo sistemiamo)
     "BTCUSD": "BTC/USD",
     "ETHUSD": "ETH/USD",
 }

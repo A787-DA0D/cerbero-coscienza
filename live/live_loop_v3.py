@@ -21,6 +21,47 @@ ARCHITETTURA (VINCOLANTE):
 
 # --- Soppressione warning fastidiosi per dry-run ---
 import warnings
+
+
+# =========================
+# MACRO_PRICE_FEED_TWELVEDATA (NO parquet / NO features)
+# =========================
+import os, time
+import requests
+
+_TD_API_KEY = os.getenv("TWELVE_DATA_API_KEY", "").strip()
+_TD_QUOTE_URL = "https://api.twelvedata.com/quote"
+
+_macro_cache = {}  # key -> (ts, value)
+
+def _td_quote(symbol_td: str) -> float | None:
+    if not _TD_API_KEY:
+        return None
+    try:
+        r = requests.get(_TD_QUOTE_URL, params={"symbol": symbol_td, "apikey": _TD_API_KEY}, timeout=10)
+        j = r.json()
+        if isinstance(j, dict) and j.get("status") == "error":
+            return None
+        px = j.get("price") or j.get("close")
+        return float(px) if px is not None else None
+    except Exception:
+        return None
+
+def _macro_get(key: str, ttl_sec: int, fetch_fn):
+    now = time.time()
+    ts, val = _macro_cache.get(key, (0.0, None))
+    if val is not None and (now - ts) < ttl_sec:
+        return val
+    val = fetch_fn()
+    _macro_cache[key] = (now, val)
+    return val
+
+def get_macro_prices() -> dict:
+    # DOLLARIDXUSD is macro-only; use TwelveData USDX (or DX) as proxy
+    usdx = _macro_get("USDX", ttl_sec=60, fetch_fn=lambda: _td_quote("USDX"))
+    return {
+        "DOLLARIDXUSD": usdx
+    }
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=ImportWarning)
@@ -145,6 +186,9 @@ def _mark_intent_sent(symbol: str, now_ts: float) -> None:
 
 
 def _load_features_df(symbol: str, tf: str) -> Optional[pd.DataFrame]:
+    if symbol == "DOLLARIDXUSD":
+        return None
+
     local_path = f"{Path.home()}/cerbero-coscienza/local_features/features_{tf}/{symbol}.parquet"
     try:
         df = pd.read_parquet(local_path)
@@ -481,8 +525,10 @@ def _evaluate_symbol_tf(symbol: str, tf: str, radar_cfg, ipda: IPDALSTM, equity:
         "tp_price": (float(tp_price) if tp_price is not None else None),
 
         # broker-agnostic risk targets (percentuali "umane")
-        "sl_pct": float(sl_pct),
-        "tp_pct": float(tp_pct),
+        "sl_pct_human": float(sl_pct),
+        "sl_pct_dec": float(sl_pct) / 100.0,
+        "tp_pct_human": float(tp_pct),
+        "tp_pct_dec": float(tp_pct) / 100.0,
         "tp_r": float(tp_r),
         "strategy_origin": f"IPDA_{tf.upper()}",
         "probs": dict(probs),
@@ -537,6 +583,8 @@ def main() -> None:
     _log(f"== Cerbero Coscienza v3 – live loop (IPDA+Radar) dry_run={dry_run}, equity={equity}, trade_tfs={trade_tfs} ==")
 
     for sym in SYMBOLS:
+        if sym == "DOLLARIDXUSD":
+            continue
         for tf in trade_tfs:
             try:
                 radar_cfg = load_radar_config(sym, tf)

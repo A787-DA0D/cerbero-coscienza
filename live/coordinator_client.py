@@ -49,41 +49,35 @@ def _to_float(x: Any, default: float) -> float:
 
 
 def _build_payload(raw_signal: Dict[str, Any]) -> Dict[str, Any]:
-    # 1) CANONICO istituzionale (risk_notional_usd, leverage, SL/TP, ecc.)
+    # 1) CANONICO istituzionale
     payload = normalize_intent_for_coordinator(raw_signal)
 
-    # Hard-coherence: canonico deve essere la fonte di verità.
-    # Se manca sl_price qui, è un bug upstream e va fermato subito.
     if payload.get("sl_price") is None:
         raise ValueError("normalize_intent_for_coordinator produced missing sl_price (BUG)")
 
-    # Allinea anche i campi legacy/meta ai canonici (no divergenze)
     raw_signal = dict(raw_signal or {})
     raw_signal["sl_price"] = payload.get("sl_price")
     raw_signal["tp_price"] = payload.get("tp_price")
     raw_signal["risk_notional_usd"] = payload.get("risk_notional_usd")
     raw_signal["leverage"] = payload.get("leverage")
 
-    # 2) Compatibilità (necessari oggi)
     tf = (raw_signal.get("tf") or raw_signal.get("timeframe") or "15m")
-    # tenant identity (CeFi): preferisci raw_signal, altrimenti ENV founder
     tenant_email = raw_signal.get("tenant_email") or raw_signal.get("user_id") or None
     if not tenant_email:
         tenant_email = (os.environ.get("CERBERO_TENANT_EMAIL", "") or "").strip() or None
     if not tenant_email:
-        raise ValueError("tenant_email missing: set raw_signal.tenant_email or ENV CERBERO_TENANT_EMAIL")
+        raise ValueError("tenant_email missing")
 
-    sig_class = raw_signal.get("sig_class") or raw_signal.get("signal_class") or "A"
+    sig_class = raw_signal.get("sig_class") or "A"
     strength_class = _strength_class_from_sig_class(str(sig_class))
 
-    ts_signal = raw_signal.get("ts_signal") or raw_signal.get("now_utc") or raw_signal.get("ts_created")
+    ts_signal = raw_signal.get("ts_signal")
     if not ts_signal:
         raise ValueError("raw_signal missing ts_signal")
 
     risk_pct = _to_float(raw_signal.get("risk_pct"), default=None)
-
     if risk_pct is None:
-        raise ValueError("raw_signal missing risk_pct (institutional sizing requires it)")
+        raise ValueError("raw_signal missing risk_pct")
 
     payload.update({
         "tenant_email": tenant_email,
@@ -94,32 +88,55 @@ def _build_payload(raw_signal: Dict[str, Any]) -> Dict[str, Any]:
         "ts_signal": ts_signal,
     })
 
-    # ✅ IMPORTANTISSIMO: non sovrascrivere la meta del normalizer.
-    # Facciamo merge e preserviamo sl_pct/tp_pct in formato DECIMALE già normalizzati.
     meta_out = dict(payload.get("meta") or {})
     meta_out.update({
         "strategy_origin": raw_signal.get("strategy_origin"),
         "p_blend": raw_signal.get("p_blend"),
         "strength": raw_signal.get("strength"),
         "reasons": raw_signal.get("reasons"),
-
-        # compat keys per executor (absolute SL/TP)
         "tp": raw_signal.get("tp_price"),
         "sl": raw_signal.get("sl_price"),
-
-        # (NON rimettere sl_pct/tp_pct da raw_signal se possono essere percentuali umane)
         "tp_r": raw_signal.get("tp_r"),
     })
 
-    # se il normalizer ha già sl_pct/tp_pct (decimali), li lasciamo lì
+    def _as_float(x):
+        try:
+            return float(x)
+        except Exception:
+            return None
+
+    # --- ENSURE SL/TP PCT DECIMALS IN META (both keys, always) ---
+    # priority: existing meta (from normalizer) -> raw_signal *_dec -> raw_signal *_human -> raw_signal sl_pct/tp_pct (human?) safe-convert
+    def _ensure_pct(meta_key_dec: str, meta_key: str, raw_dec_key: str, raw_human_key: str):
+        v = _as_float(meta_out.get(meta_key_dec))
+        if v is None:
+            v = _as_float(meta_out.get(meta_key))
+        if v is None:
+            v = _as_float(raw_signal.get(raw_dec_key))
+        if v is None:
+            vh = _as_float(raw_signal.get(raw_human_key))
+            if vh is not None:
+                v = vh / 100.0
+        # last resort: raw_signal has sl_pct/tp_pct but might be human (e.g. 0.25) or decimal (0.0025)
+        if v is None:
+            vv = _as_float(raw_signal.get(meta_key))
+            if vv is not None:
+                v = vv / 100.0 if vv > 0.05 else vv  # heuristic: 0.25 is human; 0.0025 is decimal
+
+        if v is not None:
+            meta_out[meta_key_dec] = float(v)
+            meta_out[meta_key] = float(v)
+
+    _ensure_pct("sl_pct_dec", "sl_pct", "sl_pct_dec", "sl_pct_human")
+    _ensure_pct("tp_pct_dec", "tp_pct", "tp_pct_dec", "tp_pct_human")
+
     payload["meta"] = meta_out
-
     return payload
-
 
 def send_trade_intent(raw_signal: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
     url = f"{COORDINATOR_BASE_URL}/v1/trade-intent"
     payload = _build_payload(raw_signal)
+    print("[COORDINATOR] SENT_PAYLOAD", json.dumps(payload)[:2000])
 
     headers = {"Content-Type": "application/json"}
     if COORDINATOR_API_KEY:
